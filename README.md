@@ -6,8 +6,6 @@ This simple script is designed to be run on startup and will automatically start
 
 The config.toml file controls the setup options for the code. To run run things properly the config.toml should sit with the executible in the same directory.
 
-> **_NOTE:_**
-> Conda should be added to Path on windows for this script to work properly.
 
 ## Script Steps:
 
