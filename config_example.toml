@@ -9,3 +9,6 @@ script = "app.py"
 
 # The name of the environment YAML file
 env_file = "environment.yaml" # This will be a local path based on the directory of the streamlit app.
+
+# Full path to the conda installation directory
+conda_path = "C:\\ProgramData\\anaconda3"

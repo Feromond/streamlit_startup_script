@@ -9,6 +9,7 @@ struct Config {
     environment: String,
     script: String,
     env_file: String,
+    conda_path: String,
 }
 
 fn main() {
@@ -20,11 +21,17 @@ fn main() {
     // Change directory to the one specified in the config
     env::set_current_dir(&config.directory).expect("Failed to change directory");
 
+    // Full path to the conda executable
+    let conda_executable = format!("{}\\condabin\\conda.bat", config.conda_path);
+
     // Command to create the conda environment from the environment.yaml file
-    let create_env_command = format!("conda env create -f {}", config.env_file);
+    let create_env_command = format!("{} env create -f {}", conda_executable, config.env_file);
 
     // Command to update the conda environment from the environment.yaml file
-    let update_env_command = format!("conda env update -f {} --prune", config.env_file);
+    let update_env_command = format!(
+        "{} env update -f {} --prune",
+        conda_executable, config.env_file
+    );
 
     // Run the command to create the environment
     Command::new("cmd")
@@ -40,8 +47,8 @@ fn main() {
 
     // Command to activate the conda environment and run the Streamlit app
     let run_command = format!(
-        "conda activate {} && streamlit run {}",
-        config.environment, config.script
+        "{} activate {} && streamlit run {}",
+        conda_executable, config.environment, config.script
     );
 
     // Execute the command to activate the environment and run the app
