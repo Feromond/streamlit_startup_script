@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use std::env;
 use std::fs;
+use std::io::{self, Write};
+use std::path::Path;
 use std::process::Command;
 
 #[derive(Deserialize)]
@@ -12,11 +14,30 @@ struct Config {
     conda_path: String,
 }
 
+// Reads the config file and parses it into the Config struct
+fn read_config() -> Result<Config, Box<dyn std::error::Error>> {
+    let config_path = Path::new("config.toml");
+
+    if !config_path.exists() {
+        eprintln!("Config file not found in the same directory as the executable. Please ensure 'config.toml' is present.");
+
+        // Prompt the user to press Enter before exiting
+        print!("Press Enter to exit...");
+        io::stdout().flush()?; // Ensure the message is printed before reading input
+        let _ = io::stdin().read_line(&mut String::new());
+
+        std::process::exit(1); // Exit the program with a non-zero status
+    }
+
+    let config_content = fs::read_to_string(config_path)?;
+    let config: Config = toml::from_str(&config_content)?;
+    Ok(config)
+}
+
 fn main() {
     // Read and parse the configuration file
-    let config_data = fs::read_to_string("config.toml").expect("Failed to read configuration file");
-
-    let config: Config = toml::from_str(&config_data).expect("Failed to parse configuration file");
+    // Read and parse the configuration file
+    let config = read_config().expect("Failed to read configuration");
 
     // Change directory to the one specified in the config
     env::set_current_dir(&config.directory).expect("Failed to change directory");
