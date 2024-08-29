@@ -5,7 +5,7 @@ directory = "C:\\Users\\your_user_name\\Documents\\example\\path"
 environment = "conda environment name"
 
 # The Python file to run with Streamlit
-script = "app.py"
+script = "app.py --server.headless true"
 
 # The name of the environment YAML file
 env_file = "environment.yaml" # This will be a local path based on the directory of the streamlit app.
