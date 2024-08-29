@@ -30,7 +30,8 @@ The config.toml file controls the setup options for the code. To run run things 
    4. Choose “When the computer starts” as the trigger.
    5. Select “Start a Program” as the action.
    6. Browse to the compiled Rust executable (.exe) and select it.
-   7. Configure the task to run with highest privileges if needed.
+   7. Make sure to modify the "Start In (optional)" field to be the directory that holds the executable and the config. Logs will also generate here after.
+   8. Configure the task to run with highest privileges if needed.
 
 2. Startup Folder:
 
