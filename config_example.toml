@@ -5,10 +5,10 @@ directory = "C:\\Users\\your_user_name\\Documents\\example\\path"
 environment = "conda environment name"
 
 # The Python file to run with Streamlit
-script = "app.py --server.headless true"
+script = "app.py --server.headless true" # Using the headless flag is critical when running as a background task
 
 # The name of the environment YAML file
 env_file = "environment.yaml" # This will be a local path based on the directory of the streamlit app.
 
-# Full path to the conda installation directory
+# Full path to the conda installation directory (on mac os it could look like: /opt/miniconda3)
 conda_path = "C:\\ProgramData\\anaconda3"
