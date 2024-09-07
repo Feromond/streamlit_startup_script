@@ -1,10 +1,15 @@
+use log::{error, info};
 use serde::Deserialize;
+use simplelog::*;
 use std::env;
-use std::fs::{self, OpenOptions};
-use std::io::{self, BufWriter, Write};
+use std::env::consts::OS;
+use std::fs::File;
+use std::fs::{self};
+use std::io::{self, Write};
 use std::path::Path;
 use std::process::Command;
 
+// Struct to hold the configuration
 #[derive(Deserialize)]
 struct Config {
     directory: String,
@@ -14,191 +19,156 @@ struct Config {
     conda_path: String,
 }
 
-fn log_message(message: &str, log_file: &mut BufWriter<std::fs::File>) {
-    let log_entry = format!(
-        "{}: {}\n",
-        chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-        message
-    );
-    log_file
-        .write_all(log_entry.as_bytes())
-        .expect("Failed to write to log file");
-    log_file.flush().expect("Failed to flush log file");
-}
-
 // Reads the config file and parses it into the Config struct
-fn read_config(
-    log_file: &mut BufWriter<std::fs::File>,
-) -> Result<Config, Box<dyn std::error::Error>> {
+fn read_config() -> Result<Config, Box<dyn std::error::Error>> {
     let config_path = Path::new("config.toml");
 
     if !config_path.exists() {
-        eprintln!("Config file not found in the same directory as the executable. Please ensure 'config.toml' is present.");
-
-        // Prompt the user to press Enter before exiting
+        error!("Config file not found in the same directory as the executable. Please ensure 'config.toml' is present.");
         print!("Press Enter to exit...");
         io::stdout().flush()?; // Ensure the message is printed before reading input
         let _ = io::stdin().read_line(&mut String::new());
-
-        std::process::exit(1); // Exit the program with a non-zero status
+        std::process::exit(1);
     }
 
-    let config_content = match fs::read_to_string(config_path) {
-        Ok(data) => {
-            log_message("Configuration file read successfully.", log_file);
-            data
-        }
-        Err(e) => {
-            log_message(
-                &format!("Failed to read configuration file: {}", e),
-                log_file,
-            );
-            return Err(Box::new(e));
-        }
-    };
+    let config_content = fs::read_to_string(config_path).map_err(|e| {
+        error!("Failed to read configuration file: {}", e);
+        e
+    })?;
 
-    let config: Config = match toml::from_str(&config_content) {
-        Ok(cfg) => {
-            log_message("Configuration file parsed successfully.", log_file);
-            cfg
-        }
-        Err(e) => {
-            log_message(
-                &format!("Failed to parse configuration file: {}", e),
-                log_file,
-            );
-            return Err(Box::new(e));
-        }
-    };
+    info!("Configuration file read successfully.");
+    let config: Config = toml::from_str(&config_content).map_err(|e| {
+        error!("Failed to parse configuration file: {}", e);
+        e
+    })?;
 
+    info!("Configuration file parsed successfully.");
     Ok(config)
 }
 
-fn main() {
-    let log_file_path = "script_log.txt";
-    let log_file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(log_file_path)
-        .expect("Failed to open log file");
-    let mut log_file = BufWriter::new(log_file);
+fn run_conda_command(
+    command: &str,
+) -> Result<std::process::ExitStatus, Box<dyn std::error::Error>> {
+    if OS == "windows" {
+        // Windows uses cmd
+        Command::new("cmd")
+            .args(&["/C", command])
+            .status()
+            .map_err(|e| e.into())
+    } else {
+        // macOS/Linux can run commands directly
+        Command::new("zsh")
+            .arg("-c")
+            .arg(command)
+            .status()
+            .map_err(|e| e.into())
+    }
+}
 
-    log_message("Script started.", &mut log_file);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging to a file
+    CombinedLogger::init(vec![WriteLogger::new(
+        LevelFilter::Info,
+        ConfigBuilder::new().build(),
+        File::create("app.log")?,
+    )])?;
+
+    info!("Script started.");
 
     // Read and parse the configuration file
-    let config = read_config(&mut log_file).expect("Failed to read configuration");
+    let config = read_config().expect("Failed to read configuration");
 
     // Change directory to the one specified in the config
     if let Err(e) = env::set_current_dir(&config.directory) {
-        log_message(&format!("Failed to change directory: {}", e), &mut log_file);
-        return;
+        error!("Failed to change directory: {}", e);
+        return Ok(());
     }
-    log_message(
-        &format!("Changed directory to: {}", config.directory),
-        &mut log_file,
-    );
+    info!("Changed directory to: {}", config.directory);
 
     // Full path to the conda executable
-    let conda_executable = format!("{}\\condabin\\conda.bat", config.conda_path);
-
-    // Command to create the conda environment from the environment.yaml file
+    let conda_executable = if OS == "windows" {
+        format!("{}\\condabin\\conda.bat", config.conda_path)
+    } else {
+        format!("{}/bin/conda", config.conda_path)
+    };
     let create_env_command = format!("{} env create -f {}", conda_executable, config.env_file);
-    log_message(
-        &format!(
-            "Running command to create conda environment: {}",
-            create_env_command
-        ),
-        &mut log_file,
+    info!(
+        "Running command to create conda environment: {}",
+        create_env_command
     );
 
     // Run the command to create the environment
-    let create_status = Command::new("cmd")
-        .args(&["/C", &create_env_command])
-        .status();
+    let create_status = run_conda_command(&create_env_command);
 
     match create_status {
+        Ok(status) if status.success() => {
+            info!("Conda environment created successfully.");
+        }
         Ok(status) => {
-            if status.success() {
-                log_message("Conda environment created successfully.", &mut log_file);
-            } else {
-                log_message(
-                    &format!(
-                        "Conda environment creation failed with exit code: {}",
-                        status
-                    ),
-                    &mut log_file,
-                );
-            }
+            error!(
+                "Conda environment creation failed with exit code: {}",
+                status
+            );
         }
         Err(e) => {
-            log_message(
-                &format!("Failed to create conda environment: {}", e),
-                &mut log_file,
-            );
-            return;
+            error!("Failed to create conda environment: {}", e);
+            return Ok(());
         }
     }
 
     // Command to update the conda environment from the environment.yaml file
     let update_env_command = format!(
-        "{} env update -f {} --prune",
-        conda_executable, config.env_file
-    );
-    log_message(
-        &format!(
+            "{} env update -f {} --prune",
+            conda_executable, config.env_file
+        );
+        info!(
             "Running command to update conda environment: {}",
             update_env_command
-        ),
-        &mut log_file,
-    );
+        );
 
-    // Run the command to update the environment
-    let update_status = Command::new("cmd")
-        .args(&["/C", &update_env_command])
-        .status();
+        // Run the command to update the environment
+        let update_status = run_conda_command(&update_env_command);
 
-    match update_status {
-        Ok(status) => {
-            if status.success() {
-                log_message("Conda environment updated successfully.", &mut log_file);
-            } else {
-                log_message(
-                    &format!("Conda environment update failed with exit code: {}", status),
-                    &mut log_file,
-                );
+        match update_status {
+            Ok(status) if status.success() => {
+                info!("Conda environment updated successfully.");
+            }
+            Ok(status) => {
+                error!("Conda environment update failed with exit code: {}", status);
+            }
+            Err(e) => {
+                error!("Failed to update conda environment: {}", e);
+                return Ok(());
             }
         }
-        Err(e) => {
-            log_message(
-                &format!("Failed to update conda environment: {}", e),
-                &mut log_file,
-            );
-            return;
+
+        // Command to activate the conda environment and run the Streamlit app
+        let run_command = if OS == "windows" {
+                format!(
+                    "{} activate {} && streamlit run {}",
+                    conda_executable, config.environment, config.script
+                )
+            } else {
+                format!(
+                    "source {}/etc/profile.d/conda.sh && conda activate {} && streamlit run {}",
+                    config.conda_path, config.environment, config.script
+                )
+            };
+            info!("Running command to start Streamlit app: {}", run_command);
+
+        // Execute the command to activate the environment and run the app
+        let run_status = run_conda_command(&run_command);
+
+        match run_status {
+            Ok(_) => {
+                info!("Streamlit app started successfully.");
+            }
+            Err(e) => {
+                error!("Failed to execute process: {}", e);
+                return Ok(());
+            }
         }
+
+        info!("Script completed.");
+        Ok(())
     }
-
-    // Command to activate the conda environment and run the Streamlit app
-    let run_command = format!(
-        "{} activate {} && streamlit run {}",
-        conda_executable, config.environment, config.script
-    );
-    log_message(
-        &format!("Running command to start Streamlit app: {}", run_command),
-        &mut log_file,
-    );
-
-    // Execute the command to activate the environment and run the app
-    let run_status = Command::new("cmd").args(&["/C", &run_command]).status();
-
-    match run_status {
-        Ok(_) => {
-            log_message("Streamlit app started successfully.", &mut log_file);
-        }
-        Err(e) => {
-            log_message(&format!("Failed to execute process: {}", e), &mut log_file);
-            return;
-        }
-    }
-
-    log_message("Script completed.", &mut log_file);
-}

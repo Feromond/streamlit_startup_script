@@ -7,3 +7,5 @@ edition = "2021"
 serde = { version = "1.0.209", features = ["derive"] }
 toml = "0.8.19"
 chrono = "0.4.38"
+log = "0.4.22"
+simplelog = "0.12.2"
